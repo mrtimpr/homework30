@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 
 
+
 class UserManager(BaseUserManager):
     """Менеджер пользователя с авторизацией по email."""
 
@@ -103,3 +104,58 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
+
+
+class Payment(models.Model):
+    """Модель платежа пользователя за курс или урок."""
+
+    PAYMENT_METHOD_CASH = "cash"
+    PAYMENT_METHOD_TRANSFER = "transfer"
+
+    PAYMENT_METHOD_CHOICES = [
+        (PAYMENT_METHOD_CASH, "наличные"),
+        (PAYMENT_METHOD_TRANSFER, "перевод на счет"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="пользователь",
+    )
+    payment_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="дата оплаты",
+    )
+    paid_course = models.ForeignKey(
+        "lms.Course",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="payments",
+        verbose_name="оплаченный курс",
+    )
+    paid_lesson = models.ForeignKey(
+        "lms.Lesson",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="payments",
+        verbose_name="оплаченный урок",
+    )
+    amount = models.PositiveIntegerField(
+        verbose_name="сумма оплаты",
+    )
+    payment_method = models.CharField(
+        max_length=20,
+        choices=PAYMENT_METHOD_CHOICES,
+        verbose_name="способ оплаты",
+    )
+
+    class Meta:
+        verbose_name = "платёж"
+        verbose_name_plural = "платежи"
+        ordering = ("-payment_date",)
+
+    def __str__(self) -> str:
+        return f"{self.user.email}: {self.amount}"
