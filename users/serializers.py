@@ -79,15 +79,7 @@ class UserSerializer(serializers.ModelSerializer):
         )
 
     def create(self, validated_data):
-        """Создаёт пользователя с хешированным паролем."""
-        password = validated_data.pop("password", None)
-        user = User(**validated_data)
-
-        if password:
-            user.set_password(password)
-
-        user.save()
-        return user
+        return User.objects.create_user(**validated_data)
 
     def update(self, instance, validated_data):
         """Обновляет пользователя, при наличии пароля хеширует его."""
