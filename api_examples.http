@@ -1,0 +1,63 @@
+### Courses: list
+GET http://127.0.0.1:8000/api/courses/
+
+### Courses: create
+POST http://127.0.0.1:8000/api/courses/
+Content-Type: application/json
+
+{
+  "name": "Python-разработка",
+  "description": "Курс по основам Python"
+}
+
+### Courses: detail
+GET http://127.0.0.1:8000/api/courses/1/
+
+### Courses: partial update
+PATCH http://127.0.0.1:8000/api/courses/1/
+Content-Type: application/json
+
+{
+  "description": "Обновлённое описание курса"
+}
+
+### Courses: delete
+DELETE http://127.0.0.1:8000/api/courses/1/
+
+### Lessons: list
+GET http://127.0.0.1:8000/api/lessons/
+
+### Lessons: create
+POST http://127.0.0.1:8000/api/lessons/
+Content-Type: application/json
+
+{
+  "course": 1,
+  "name": "Введение в Python",
+  "description": "Первый урок курса",
+  "video_url": "https://www.youtube.com/watch?v=example"
+}
+
+### Lessons: detail
+GET http://127.0.0.1:8000/api/lessons/1/
+
+### Users: create
+POST http://127.0.0.1:8000/api/users/
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "12345",
+  "first_name": "Иван",
+  "last_name": "Иванов",
+  "phone": "+79990000000",
+  "city": "Москва"
+}
+
+### Users: partial update
+PATCH http://127.0.0.1:8000/api/users/1/
+Content-Type: application/json
+
+{
+  "city": "Berlin"
+}
