@@ -28,6 +28,7 @@ class Course(models.Model):
     )
 
     class Meta:
+        ordering = ["id"]
         verbose_name = "курс"
         verbose_name_plural = "курсы"
 
@@ -61,8 +62,40 @@ class Lesson(models.Model):
     video_url = models.URLField(max_length=500, verbose_name="ссылка на видео")
 
     class Meta:
+        ordering = ["id"]
         verbose_name = "урок"
         verbose_name_plural = "уроки"
 
     def __str__(self) -> str:
         return self.name
+
+
+class CourseSubscription(models.Model):
+    """Подписка пользователя на обновления курса."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_subscriptions",
+        verbose_name="пользователь",
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+        verbose_name="курс",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="дата подписки")
+
+    class Meta:
+        verbose_name = "подписка на курс"
+        verbose_name_plural = "подписки на курсы"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "course"),
+                name="unique_user_course_subscription",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} -> {self.course}"

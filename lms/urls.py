@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from lms.views import (
+    CourseSubscriptionAPIView,
     CourseViewSet,
     LessonListCreateAPIView,
     LessonRetrieveUpdateDestroyAPIView,
@@ -21,5 +22,10 @@ urlpatterns = [
         "lessons/<int:pk>/",
         LessonRetrieveUpdateDestroyAPIView.as_view(),
         name="lesson-detail",
+    ),
+    path(
+        "course-subscription/",
+        CourseSubscriptionAPIView.as_view(),
+        name="course-subscription",
     ),
 ]
