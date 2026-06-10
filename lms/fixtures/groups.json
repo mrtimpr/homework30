@@ -1,0 +1,14 @@
+[
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "Модераторы",
+      "permissions": [
+        ["view_course", "lms", "course"],
+        ["change_course", "lms", "course"],
+        ["view_lesson", "lms", "lesson"],
+        ["change_lesson", "lms", "lesson"]
+      ]
+    }
+  }
+]
