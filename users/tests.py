@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -7,11 +10,20 @@ from lms.models import Course, Lesson
 from users.models import Payment
 
 
+@dataclass(frozen=True)
+class FakeCheckoutData:
+    product_id: str = "prod_test"
+    price_id: str = "price_test"
+    session_id: str = "cs_test"
+    payment_link: str = "https://checkout.stripe.com/test"
+    status: str = Payment.STATUS_OPEN
+
+
 User = get_user_model()
 
 
 class UserAndAuthEndpointTests(APITestCase):
-    """Тесты для точек доступа к регистрации, JWT, операциям CRUD с пользователями и платежам."""
+    """Tests for registration, JWT, user CRUD and payments endpoints."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -167,3 +179,47 @@ class UserAndAuthEndpointTests(APITestCase):
 
         delete_response = self.client.delete(detail_url)
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+
+
+    def test_api_documentation_endpoints_available(self):
+        schema_response = self.client.get(reverse("schema"))
+        docs_response = self.client.get(reverse("swagger-ui"))
+
+        self.assertEqual(schema_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(docs_response.status_code, status.HTTP_200_OK)
+
+    @patch("users.views.create_checkout_for_payment")
+    def test_stripe_payment_creation_returns_payment_link(self, mocked_checkout):
+        mocked_checkout.return_value = FakeCheckoutData()
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            reverse("payments-list"),
+            {
+                "paid_course": self.course.pk,
+                "amount": 2500,
+                "payment_method": Payment.PAYMENT_METHOD_STRIPE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["payment_link"], "https://checkout.stripe.com/test")
+        self.assertEqual(response.data["stripe_session_id"], "cs_test")
+        mocked_checkout.assert_called_once()
+
+    @patch("users.views.sync_payment_status_from_stripe")
+    def test_stripe_payment_status_check(self, mocked_sync):
+        self.payment.payment_method = Payment.PAYMENT_METHOD_STRIPE
+        self.payment.stripe_session_id = "cs_test"
+        self.payment.status = Payment.STATUS_OPEN
+        self.payment.save()
+        mocked_sync.return_value = {"id": "cs_test", "payment_status": "paid"}
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            reverse("payments-check-status", kwargs={"pk": self.payment.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mocked_sync.assert_called_once()

@@ -49,3 +49,24 @@ Content-Type: application/json
 ### View another profile; returns public fields only
 GET http://127.0.0.1:8000/api/users/2/
 Authorization: Bearer {{access_token}}
+
+### OpenAPI schema
+GET http://localhost:8000/api/schema/
+
+### Swagger UI
+GET http://localhost:8000/api/docs/
+
+### Create Stripe payment
+POST http://localhost:8000/api/payments/
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "paid_course": 1,
+  "amount": 3000,
+  "payment_method": "stripe"
+}
+
+### Check Stripe payment status
+GET http://localhost:8000/api/payments/1/check-status/
+Authorization: Bearer {{access_token}}

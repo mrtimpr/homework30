@@ -64,6 +64,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "name",
             "preview",
             "description",
+            "price",
             "lesson_count",
             "lessons",
             "is_subscribed",

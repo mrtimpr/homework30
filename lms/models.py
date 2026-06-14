@@ -26,11 +26,15 @@ class Course(models.Model):
         null=True,
         verbose_name="описание",
     )
+    price = models.PositiveIntegerField(
+        default=0,
+        verbose_name="цена курса",
+    )
 
     class Meta:
-        ordering = ["id"]
         verbose_name = "курс"
         verbose_name_plural = "курсы"
+        ordering = ("id",)
 
     def __str__(self) -> str:
         return self.name
@@ -62,9 +66,9 @@ class Lesson(models.Model):
     video_url = models.URLField(max_length=500, verbose_name="ссылка на видео")
 
     class Meta:
-        ordering = ["id"]
         verbose_name = "урок"
         verbose_name_plural = "уроки"
+        ordering = ("id",)
 
     def __str__(self) -> str:
         return self.name
