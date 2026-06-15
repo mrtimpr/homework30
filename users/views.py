@@ -98,8 +98,15 @@ class UserViewSet(viewsets.ModelViewSet):
         summary="Создание платежа и Stripe Checkout-сессии",
         description=(
             "Создаёт локальный платёж, затем создаёт в Stripe продукт, цену и "
-            "Checkout Session. В ответе возвращается ссылка payment_link."
+            "Checkout Session. Поле amount передаётся в рублях, а в Stripe "
+            "отправляется в копейках. В ответе возвращаются данные платежа "
+            "и ссылка payment_link."
         ),
+        responses={
+            201: PaymentSerializer,
+            400: OpenApiResponse(description="Ошибка валидации или ошибка Stripe"),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+        },
     ),
     update=extend_schema(tags=["payments"], summary="Обновление платежа"),
     partial_update=extend_schema(tags=["payments"], summary="Частичное обновление платежа"),
@@ -129,28 +136,53 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Создать локальный платёж и связать его со Stripe Checkout."""
         payment = serializer.save(user=self.request.user)
-        if payment.payment_method == Payment.PAYMENT_METHOD_STRIPE:
+
+        if payment.payment_method != Payment.PAYMENT_METHOD_STRIPE:
+            return
+
+        try:
             checkout_data = create_checkout_for_payment(payment)
-            payment.stripe_product_id = checkout_data.product_id
-            payment.stripe_price_id = checkout_data.price_id
-            payment.stripe_session_id = checkout_data.session_id
-            payment.payment_link = checkout_data.payment_link
-            payment.status = checkout_data.status
-            payment.save(
-                update_fields=[
-                    "stripe_product_id",
-                    "stripe_price_id",
-                    "stripe_session_id",
-                    "payment_link",
-                    "status",
-                ]
-            )
+        except ValidationError:
+            payment.status = Payment.STATUS_CANCELED
+            payment.save(update_fields=["status"])
+            raise
+        except Exception as error:
+            payment.status = Payment.STATUS_CANCELED
+            payment.save(update_fields=["status"])
+            raise ValidationError({"stripe": str(error)}) from error
+
+        payment.stripe_product_id = checkout_data.product_id
+        payment.stripe_price_id = checkout_data.price_id
+        payment.stripe_session_id = checkout_data.session_id
+        payment.payment_link = checkout_data.payment_link
+        payment.status = checkout_data.status
+        payment.save(
+            update_fields=[
+                "stripe_product_id",
+                "stripe_price_id",
+                "stripe_session_id",
+                "payment_link",
+                "status",
+            ]
+        )
 
     @extend_schema(
         tags=["payments"],
         summary="Проверка статуса платежа в Stripe",
-        description="Получает Stripe Checkout Session по сохранённому session id и обновляет локальный статус платежа.",
-        responses={200: PaymentSerializer, 400: OpenApiResponse(description="Ошибка проверки статуса")},
+        description=(
+            "Получает актуальный статус Stripe Checkout Session по stripe_session_id "
+            "и синхронизирует статус платежа в базе данных."
+        ),
+        responses={
+            200: PaymentSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "У платежа отсутствует stripe_session_id или Stripe вернул ошибку"
+                )
+            ),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            404: OpenApiResponse(description="Платёж не найден"),
+        },
     )
     @action(detail=True, methods=["get"], url_path="check-status")
     def check_status(self, request, pk=None):

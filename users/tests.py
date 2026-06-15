@@ -23,7 +23,7 @@ User = get_user_model()
 
 
 class UserAndAuthEndpointTests(APITestCase):
-    """Tests for registration, JWT, user CRUD and payments endpoints."""
+    """Тесты для точек доступа к регистрации, JWT, операциям CRUD с пользователями и платежам."""
 
     def setUp(self):
         self.user = User.objects.create_user(
