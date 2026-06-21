@@ -10,7 +10,7 @@ from lms.models import Course, Lesson
 from users.models import Payment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FakeCheckoutData:
     product_id: str = "prod_test"
     price_id: str = "price_test"
@@ -182,11 +182,12 @@ class UserAndAuthEndpointTests(APITestCase):
 
 
     def test_api_documentation_endpoints_available(self):
-        schema_response = self.client.get(reverse("schema"))
-        docs_response = self.client.get(reverse("swagger-ui"))
+        url_names = ["schema", "swagger-ui"]
 
-        self.assertEqual(schema_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(docs_response.status_code, status.HTTP_200_OK)
+        for url_name in url_names:
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     @patch("users.views.create_checkout_for_payment")
     def test_stripe_payment_creation_returns_payment_link(self, mocked_checkout):

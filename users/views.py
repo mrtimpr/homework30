@@ -15,7 +15,11 @@ from users.serializers import (
     UserPublicSerializer,
     UserRegisterSerializer,
 )
-from users.services import create_checkout_for_payment, sync_payment_status_from_stripe
+from users.services import (
+    StripeServiceError,
+    create_checkout_for_payment,
+    sync_payment_status_from_stripe,
+)
 
 
 @extend_schema(
@@ -98,9 +102,9 @@ class UserViewSet(viewsets.ModelViewSet):
         summary="Создание платежа и Stripe Checkout-сессии",
         description=(
             "Создаёт локальный платёж, затем создаёт в Stripe продукт, цену и "
-            "Checkout Session. Поле amount передаётся в рублях, а в Stripe "
-            "отправляется в копейках. В ответе возвращаются данные платежа "
-            "и ссылка payment_link."
+            "Checkout Session. amount передаётся в рублях, а в Stripe сумма "
+            "отправляется в копейках. В ответе возвращаются данные платежа и "
+            "ссылка payment_link."
         ),
         responses={
             201: PaymentSerializer,
@@ -136,35 +140,28 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Создать локальный платёж и связать его со Stripe Checkout."""
         payment = serializer.save(user=self.request.user)
+        if payment.payment_method == Payment.PAYMENT_METHOD_STRIPE:
+            try:
+                checkout_data = create_checkout_for_payment(payment)
+            except StripeServiceError as error:
+                payment.status = Payment.STATUS_CANCELED
+                payment.save(update_fields=["status"])
+                raise ValidationError({"stripe": str(error)}) from error
 
-        if payment.payment_method != Payment.PAYMENT_METHOD_STRIPE:
-            return
-
-        try:
-            checkout_data = create_checkout_for_payment(payment)
-        except ValidationError:
-            payment.status = Payment.STATUS_CANCELED
-            payment.save(update_fields=["status"])
-            raise
-        except Exception as error:
-            payment.status = Payment.STATUS_CANCELED
-            payment.save(update_fields=["status"])
-            raise ValidationError({"stripe": str(error)}) from error
-
-        payment.stripe_product_id = checkout_data.product_id
-        payment.stripe_price_id = checkout_data.price_id
-        payment.stripe_session_id = checkout_data.session_id
-        payment.payment_link = checkout_data.payment_link
-        payment.status = checkout_data.status
-        payment.save(
-            update_fields=[
-                "stripe_product_id",
-                "stripe_price_id",
-                "stripe_session_id",
-                "payment_link",
-                "status",
-            ]
-        )
+            payment.stripe_product_id = checkout_data.product_id
+            payment.stripe_price_id = checkout_data.price_id
+            payment.stripe_session_id = checkout_data.session_id
+            payment.payment_link = checkout_data.payment_link
+            payment.status = checkout_data.status
+            payment.save(
+                update_fields=[
+                    "stripe_product_id",
+                    "stripe_price_id",
+                    "stripe_session_id",
+                    "payment_link",
+                    "status",
+                ]
+            )
 
     @extend_schema(
         tags=["payments"],
@@ -176,9 +173,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         responses={
             200: PaymentSerializer,
             400: OpenApiResponse(
-                description=(
-                    "У платежа отсутствует stripe_session_id или Stripe вернул ошибку"
-                )
+                description="У платежа отсутствует stripe_session_id или Stripe вернул ошибку"
             ),
             401: OpenApiResponse(description="Пользователь не авторизован"),
             404: OpenApiResponse(description="Платёж не найден"),
@@ -190,7 +185,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment = self.get_object()
         try:
             sync_payment_status_from_stripe(payment)
-        except Exception as error:
+        except StripeServiceError as error:
             raise ValidationError({"stripe": str(error)}) from error
         serializer = self.get_serializer(payment)
         return Response(serializer.data, status=status.HTTP_200_OK)
