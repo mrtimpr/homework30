@@ -111,10 +111,26 @@ class Payment(models.Model):
 
     PAYMENT_METHOD_CASH = "cash"
     PAYMENT_METHOD_TRANSFER = "transfer"
+    PAYMENT_METHOD_STRIPE = "stripe"
+
+    STATUS_CREATED = "created"
+    STATUS_OPEN = "open"
+    STATUS_PAID = "paid"
+    STATUS_UNPAID = "unpaid"
+    STATUS_CANCELED = "canceled"
 
     PAYMENT_METHOD_CHOICES = [
         (PAYMENT_METHOD_CASH, "наличные"),
         (PAYMENT_METHOD_TRANSFER, "перевод на счет"),
+        (PAYMENT_METHOD_STRIPE, "Stripe"),
+    ]
+
+    STATUS_CHOICES = [
+        (STATUS_CREATED, "создан"),
+        (STATUS_OPEN, "ожидает оплаты"),
+        (STATUS_PAID, "оплачен"),
+        (STATUS_UNPAID, "не оплачен"),
+        (STATUS_CANCELED, "отменён"),
     ]
 
     user = models.ForeignKey(
@@ -149,7 +165,38 @@ class Payment(models.Model):
     payment_method = models.CharField(
         max_length=20,
         choices=PAYMENT_METHOD_CHOICES,
+        default=PAYMENT_METHOD_STRIPE,
         verbose_name="способ оплаты",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_CREATED,
+        verbose_name="статус платежа",
+    )
+    stripe_product_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="ID продукта Stripe",
+    )
+    stripe_price_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="ID цены Stripe",
+    )
+    stripe_session_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="ID сессии Stripe",
+    )
+    payment_link = models.URLField(
+        max_length=1000,
+        blank=True,
+        null=True,
+        verbose_name="ссылка на оплату",
     )
 
     class Meta:

@@ -1,6 +1,8 @@
 from django.db import IntegrityError
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import filters, generics, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -13,7 +15,18 @@ from users.serializers import (
     UserPublicSerializer,
     UserRegisterSerializer,
 )
+from users.services import (
+    StripeServiceError,
+    create_checkout_for_payment,
+    sync_payment_status_from_stripe,
+)
 
+
+@extend_schema(
+    tags=["auth"],
+    summary="Регистрация пользователя",
+    description="Создаёт пользователя. Эндпоинт доступен без JWT-токена.",
+)
 class UserRegisterAPIView(generics.CreateAPIView):
     """Публичная конечная точка для регистрации пользователей."""
 
@@ -22,7 +35,7 @@ class UserRegisterAPIView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
-        """Создать пользователя и преобразовать конфликты дублирования email-адресов в ответ с кодом 400."""
+        """Создать пользователя и преобразовать конфликты email в ответ 400."""
         try:
             serializer.save()
         except IntegrityError as error:
@@ -30,8 +43,17 @@ class UserRegisterAPIView(generics.CreateAPIView):
                 {"email": "Пользователь с таким email уже существует."}
             ) from error
 
+
+@extend_schema_view(
+    list=extend_schema(tags=["users"], summary="Список пользователей"),
+    retrieve=extend_schema(tags=["users"], summary="Профиль пользователя"),
+    create=extend_schema(tags=["users"], summary="Создание пользователя"),
+    update=extend_schema(tags=["users"], summary="Обновление пользователя"),
+    partial_update=extend_schema(tags=["users"], summary="Частичное обновление пользователя"),
+    destroy=extend_schema(tags=["users"], summary="Удаление пользователя"),
+)
 class UserViewSet(viewsets.ModelViewSet):
-    """CRUD-операции для пользователей с безопасным представлением публичного и приватного профиля."""
+    """CRUD-операции для пользователей с безопасным профилем."""
 
     queryset = User.objects.prefetch_related("payments").all()
     permission_classes = [IsAuthenticated, IsSelfForWriteOrReadOnly]
@@ -45,7 +67,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserPrivateSerializer
 
     def retrieve(self, request, *args, **kwargs):
-        """Возвращать полный профиль только для себя и сотрудников, публичный профиль — для остальных."""
+        """Возвращать полный профиль только для себя и сотрудников."""
         instance = self.get_object()
         is_own_profile = instance == request.user
         can_see_private = is_own_profile or request.user.is_staff or request.user.is_superuser
@@ -54,7 +76,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
-        """Обновлять только собственный профиль текущего пользователя, если он не является сотрудником."""
+        """Обновлять профиль в соответствии с object permission."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
         serializer = UserPrivateSerializer(
@@ -68,17 +90,39 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
-        """Удалить профиль пользователя в соответствии с правами доступа к объекту."""
+        """Удалить профиль пользователя в соответствии с object permission."""
         return super().destroy(request, *args, **kwargs)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["payments"], summary="Список платежей"),
+    retrieve=extend_schema(tags=["payments"], summary="Детальная информация о платеже"),
+    create=extend_schema(
+        tags=["payments"],
+        summary="Создание платежа и Stripe Checkout-сессии",
+        description=(
+            "Создаёт локальный платёж, затем создаёт в Stripe продукт, цену и "
+            "Checkout Session. amount передаётся в рублях, а в Stripe сумма "
+            "отправляется в копейках. В ответе возвращаются данные платежа и "
+            "ссылка payment_link."
+        ),
+        responses={
+            201: PaymentSerializer,
+            400: OpenApiResponse(description="Ошибка валидации или ошибка Stripe"),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+        },
+    ),
+    update=extend_schema(tags=["payments"], summary="Обновление платежа"),
+    partial_update=extend_schema(tags=["payments"], summary="Частичное обновление платежа"),
+    destroy=extend_schema(tags=["payments"], summary="Удаление платежа"),
+)
 class PaymentViewSet(viewsets.ModelViewSet):
-    """CRUD-операции для платежей с ограничениями по владельцу."""
+    """CRUD платежей и Stripe Checkout для оплаты курсов/уроков."""
 
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated, IsOwnerPaymentOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ("paid_course", "paid_lesson", "payment_method")
+    filterset_fields = ("paid_course", "paid_lesson", "payment_method", "status")
     ordering_fields = ("payment_date",)
     ordering = ("-payment_date",)
 
@@ -94,15 +138,54 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        """Привязать новый платеж к текущему пользователю."""
-        serializer.save(user=self.request.user)
+        """Создать локальный платёж и связать его со Stripe Checkout."""
+        payment = serializer.save(user=self.request.user)
+        if payment.payment_method == Payment.PAYMENT_METHOD_STRIPE:
+            try:
+                checkout_data = create_checkout_for_payment(payment)
+            except StripeServiceError as error:
+                payment.status = Payment.STATUS_CANCELED
+                payment.save(update_fields=["status"])
+                raise ValidationError({"stripe": str(error)}) from error
 
-    def create(self, request, *args, **kwargs):
-        """Создать платеж и вернуть созданный объект."""
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            payment.stripe_product_id = checkout_data.product_id
+            payment.stripe_price_id = checkout_data.price_id
+            payment.stripe_session_id = checkout_data.session_id
+            payment.payment_link = checkout_data.payment_link
+            payment.status = checkout_data.status
+            payment.save(
+                update_fields=[
+                    "stripe_product_id",
+                    "stripe_price_id",
+                    "stripe_session_id",
+                    "payment_link",
+                    "status",
+                ]
+            )
 
-
+    @extend_schema(
+        tags=["payments"],
+        summary="Проверка статуса платежа в Stripe",
+        description=(
+            "Получает актуальный статус Stripe Checkout Session по stripe_session_id "
+            "и синхронизирует статус платежа в базе данных."
+        ),
+        responses={
+            200: PaymentSerializer,
+            400: OpenApiResponse(
+                description="У платежа отсутствует stripe_session_id или Stripe вернул ошибку"
+            ),
+            401: OpenApiResponse(description="Пользователь не авторизован"),
+            404: OpenApiResponse(description="Платёж не найден"),
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="check-status")
+    def check_status(self, request, pk=None):
+        """Проверить статус Stripe Checkout Session."""
+        payment = self.get_object()
+        try:
+            sync_payment_status_from_stripe(payment)
+        except StripeServiceError as error:
+            raise ValidationError({"stripe": str(error)}) from error
+        serializer = self.get_serializer(payment)
+        return Response(serializer.data, status=status.HTTP_200_OK)

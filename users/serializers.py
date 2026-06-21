@@ -24,8 +24,23 @@ class PaymentSerializer(serializers.ModelSerializer):
             "amount",
             "payment_method",
             "payment_method_display",
+            "status",
+            "stripe_product_id",
+            "stripe_price_id",
+            "stripe_session_id",
+            "payment_link",
         )
-        read_only_fields = ("id", "user", "user_email", "payment_date")
+        read_only_fields = (
+            "id",
+            "user",
+            "user_email",
+            "payment_date",
+            "status",
+            "stripe_product_id",
+            "stripe_price_id",
+            "stripe_session_id",
+            "payment_link",
+        )
 
 
 class UserPaymentHistorySerializer(serializers.ModelSerializer):
@@ -46,6 +61,8 @@ class UserPaymentHistorySerializer(serializers.ModelSerializer):
             "amount",
             "payment_method",
             "payment_method_display",
+            "status",
+            "payment_link",
         )
 
 

@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, status, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -11,6 +12,14 @@ from lms.permissions import IsOwnerOrModerator, is_moderator
 from lms.serializers import CourseSerializer, LessonSerializer
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["courses"], summary="Список курсов"),
+    retrieve=extend_schema(tags=["courses"], summary="Детальная информация о курсе"),
+    create=extend_schema(tags=["courses"], summary="Создание курса"),
+    update=extend_schema(tags=["courses"], summary="Обновление курса"),
+    partial_update=extend_schema(tags=["courses"], summary="Частичное обновление курса"),
+    destroy=extend_schema(tags=["courses"], summary="Удаление курса"),
+)
 class CourseViewSet(viewsets.ModelViewSet):
     """CRUD для курса через ViewSet."""
 
@@ -51,6 +60,11 @@ class CourseViewSet(viewsets.ModelViewSet):
         serializer.save(owner=user)
 
 
+@extend_schema(
+    tags=["lessons"],
+    summary="Список уроков или создание урока",
+    description="GET возвращает список уроков с пагинацией, POST создаёт урок. В video_url разрешены только ссылки на youtube.com.",
+)
 class LessonListCreateAPIView(generics.ListCreateAPIView):
     """Получение списка уроков и создание урока."""
 
@@ -87,6 +101,10 @@ class LessonListCreateAPIView(generics.ListCreateAPIView):
         serializer.save(owner=user)
 
 
+@extend_schema(
+    tags=["lessons"],
+    summary="Получение, обновление или удаление урока",
+)
 class LessonRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Получение, изменение и удаление одного урока."""
 
@@ -117,6 +135,13 @@ class LessonRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         return queryset.filter(owner=user)
 
 
+@extend_schema(
+    tags=["subscriptions"],
+    summary="Добавить или удалить подписку на курс",
+    description="Если подписка текущего пользователя на course_id есть — удаляет её. Если нет — создаёт.",
+    examples=[OpenApiExample("Пример запроса", value={"course_id": 1}, request_only=True)],
+    responses={200: OpenApiResponse(description="Сообщение: подписка добавлена или подписка удалена"), 400: OpenApiResponse(description="course_id не передан")},
+)
 class CourseSubscriptionAPIView(APIView):
     """Добавление или удаление подписки текущего пользователя на курс."""
 
