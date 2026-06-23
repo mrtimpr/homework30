@@ -30,7 +30,15 @@ class Course(models.Model):
         default=0,
         verbose_name="цена курса",
     )
-
+    last_notification_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="дата последнего уведомления об обновлении",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="дата обновления",
+    )
     class Meta:
         verbose_name = "курс"
         verbose_name_plural = "курсы"

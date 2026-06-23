@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "django_filters",
     "drf_spectacular",
+    "django_celery_beat",
     "users",
     "lms",
 ]
@@ -112,3 +113,27 @@ STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "rub")
 EXTERNAL_URL = os.getenv("EXTERNAL_URL", "http://localhost:8000").rstrip("/")
 STRIPE_SUCCESS_URL = f"{EXTERNAL_URL}/api/payments/success/"
 STRIPE_CANCEL_URL = f"{EXTERNAL_URL}/api/payments/cancel/"
+
+
+# Настройки электронной почты для уведомлений от разработчиков и Celery.
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@example.com")
+
+# Настройки Celery / Redis
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = USE_TZ
+CELERY_BEAT_SCHEDULE = {
+    "block-inactive-users-every-day": {
+        "task": "users.tasks.block_inactive_users",
+        "schedule": 60 * 60 * 24,
+    },
+}
