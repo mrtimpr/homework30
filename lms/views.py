@@ -1,4 +1,8 @@
+from datetime import timedelta
+
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, status, viewsets
 from rest_framework.exceptions import PermissionDenied
@@ -10,6 +14,7 @@ from lms.models import Course, CourseSubscription, Lesson
 from lms.paginators import LMSPagination
 from lms.permissions import IsOwnerOrModerator, is_moderator
 from lms.serializers import CourseSerializer, LessonSerializer
+from lms.tasks import send_course_update_email
 
 
 @extend_schema_view(
@@ -58,6 +63,11 @@ class CourseViewSet(viewsets.ModelViewSet):
         if not user.is_staff and not user.is_superuser and is_moderator(user):
             raise PermissionDenied("Модератор не может создавать курсы.")
         serializer.save(owner=user)
+
+    def perform_update(self, serializer):
+        """Обновить курс и отправить уведомление подписчикам."""
+        course = serializer.save()
+        transaction.on_commit(lambda: send_course_update_email.delay(course.pk))
 
 
 @extend_schema(
@@ -134,6 +144,22 @@ class LessonRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             return queryset.all()
         return queryset.filter(owner=user)
 
+    def perform_update(self, serializer):
+        """Обновить урок и уведомить подписчиков, если курс не уведомлялся более 4 часов."""
+        lesson = serializer.save()
+        course = lesson.course
+
+        now = timezone.now()
+
+        if (
+                course.last_notification_at is None
+                or now - course.last_notification_at > timedelta(hours=4)
+        ):
+            transaction.on_commit(
+                lambda: send_course_update_email.delay(course.pk)
+            )
+            course.last_notification_at = now
+            course.save(update_fields=["last_notification_at"])
 
 @extend_schema(
     tags=["subscriptions"],
