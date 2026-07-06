@@ -1,561 +1,195 @@
-# LMS API
+# Homework30 LMS API
 
-Django-проект с REST API для управления курсами, уроками и пользователями.
+Django REST Framework проект для управления курсами, уроками, пользователями, подписками, Stripe-платежами и фоновой рассылкой уведомлений через Celery.
 
-Проект реализован на Django и Django REST Framework. В проекте есть кастомная модель пользователя с авторизацией по email, модели курса и урока, а также CRUD-эндпоинты для работы с курсами, уроками и пользователями.
+## Стек
 
-## Стек технологий
+- Python 3.14
+- Django / Django REST Framework
+- PostgreSQL
+- Redis
+- Celery
+- Celery Beat
+- drf-spectacular
+- Stripe API
+- Docker Compose
 
-- Python
-- Django
-- Django REST Framework
-- SQLite
-- Pillow
+## Быстрый запуск через Docker Compose
 
-## Основной функционал
+### 1. Подготовить переменные окружения
 
-- Кастомная модель пользователя
-- Авторизация пользователя по email
-- Поля пользователя:
-  - email
-  - имя
-  - фамилия
-  - телефон
-  - город
-  - аватарка
-- Модель курса
-- Модель урока
-- Связь курса и урока: один курс может содержать много уроков
-- CRUD для курсов через ViewSet
-- CRUD для уроков через Generic-классы
-- CRUD для пользователей через ViewSet
-- Возможность редактирования профиля пользователя
-
-## Структура проекта
-
-```text
-.
-├── config/
-│   ├── __init__.py
-│   ├── settings.py
-│   ├── urls.py
-│   ├── asgi.py
-│   └── wsgi.py
-│
-├── users/
-│   ├── migrations/
-│   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── forms.py
-│   ├── models.py
-│   ├── serializers.py
-│   ├── urls.py
-│   └── views.py
-│
-├── lms/
-│   ├── migrations/
-│   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── models.py
-│   ├── serializers.py
-│   ├── urls.py
-│   └── views.py
-│
-├── api_examples.http
-├── manage.py
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
-## Установка и запуск проекта
-
-### 1. Распаковать архив и перейти в папку проекта
+Скопируйте пример файла окружения:
 
 ```bash
-cd lms_api_project
+cp .env.sample .env
 ```
 
-### 2. Создать виртуальное окружение
+Для Windows PowerShell:
+
+```powershell
+copy .env.sample .env
+```
+
+Проверьте значения в `.env`. Для локального запуска можно оставить значения по умолчанию.
+
+Обязательные переменные для Docker Compose:
+
+```env
+SECRET_KEY=django-insecure-change-this-key-for-production
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+EXTERNAL_URL=http://localhost:8000
+
+POSTGRES_DB=homework30
+POSTGRES_USER=homework30
+POSTGRES_PASSWORD=homework30_password
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+DEFAULT_FROM_EMAIL=noreply@example.com
+
+STRIPE_API_KEY=sk_test_change_me
+STRIPE_CURRENCY=rub
+```
+
+### 2. Запустить проект одной командой
+
+```bash
+docker compose up --build
+```
+
+Команда поднимет все части проекта:
+
+- `web` — Django API;
+- `db` — PostgreSQL;
+- `redis` — брокер Celery;
+- `celery` — Celery worker;
+- `celery-beat` — планировщик периодических задач.
+
+Django автоматически выполнит миграции и запустится на адресе:
+
+```text
+http://localhost:8000/
+```
+
+Документация API доступна по адресам:
+
+```text
+http://localhost:8000/api/schema/
+http://localhost:8000/api/docs/
+```
+
+### 3. Создать суперпользователя
+
+В отдельном терминале выполните:
+
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+### 4. Загрузить фикстуру группы модераторов
+
+```bash
+docker compose exec web python manage.py loaddata groups.json
+```
+
+### 5. Запустить тесты
+
+```bash
+docker compose exec web python manage.py test
+```
+
+Покрытие:
+
+```bash
+docker compose exec web coverage run manage.py test
+docker compose exec web coverage report > coverage.txt
+```
+
+### 6. Остановить проект
+
+```bash
+docker compose down
+```
+
+Остановить проект и удалить volumes с данными PostgreSQL/Redis:
+
+```bash
+docker compose down -v
+```
+
+## Сервисы Docker Compose
+
+В `docker-compose.yml` описаны сервисы:
+
+| Сервис | Назначение | Доступ |
+|---|---|---|
+| `web` | Django API | `ports: 8000:8000` |
+| `db` | PostgreSQL | `expose: 5432`, внешний порт не открыт |
+| `redis` | Redis | `expose: 6379`, внешний порт не открыт |
+| `celery` | Celery worker | внешний порт не нужен |
+| `celery-beat` | периодические задачи | внешний порт не нужен |
+
+Для сохранности данных используются volumes:
+
+- `postgres_data` — данные PostgreSQL;
+- `redis_data` — данные Redis;
+- `static_volume` — собранные static-файлы;
+- `media_volume` — media-файлы;
+- `celery_beat_data` — служебные файлы Celery Beat.
+
+## Локальный запуск без Docker
 
 ```bash
 python -m venv venv
-```
-
-### 3. Активировать виртуальное окружение
-
-Для Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-Для macOS/Linux:
-
-```bash
 source venv/bin/activate
-```
-
-### 4. Установить зависимости
-
-```bash
 pip install -r requirements.txt
-```
-
-### 5. Применить миграции
-
-```bash
+cp .env.sample .env
 python manage.py migrate
-```
-
-### 6. Создать суперпользователя
-
-```bash
-python manage.py createsuperuser
-```
-
-Так как в проекте используется авторизация по email, при создании суперпользователя нужно указать email и пароль.
-
-### 7. Запустить сервер
-
-```bash
 python manage.py runserver
 ```
 
-Проект будет доступен по адресу:
-
-```text
-http://127.0.0.1:8000/
-```
-
-## Настройки проекта
-
-В `config/settings.py` подключены приложения:
-
-```python
-INSTALLED_APPS = [
-    ...
-    "rest_framework",
-
-    "users",
-    "lms",
-]
-```
-
-Также указана кастомная модель пользователя:
-
-```python
-AUTH_USER_MODEL = "users.User"
-```
-
-Для работы с изображениями добавлены настройки media-файлов:
-
-```python
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-```
-
-## Модель пользователя
-
-Модель пользователя находится в приложении `users`.
-
-Пользователь наследуется от `AbstractBaseUser` и `PermissionsMixin`.
-
-Основные поля:
-
-| Поле | Описание |
-|---|---|
-| `email` | Email пользователя, используется для авторизации |
-| `first_name` | Имя |
-| `last_name` | Фамилия |
-| `phone` | Телефон |
-| `city` | Город |
-| `avatar` | Аватарка |
-| `is_staff` | Доступ в админку |
-| `is_active` | Активность пользователя |
-| `date_joined` | Дата регистрации |
-
-Email используется как основное поле для входа:
-
-```python
-USERNAME_FIELD = "email"
-```
-
-## Модель курса
-
-Модель курса находится в приложении `lms`.
-
-Поля курса:
-
-| Поле | Описание |
-|---|---|
-| `name` | Название курса |
-| `preview` | Превью курса |
-| `description` | Описание курса |
-
-## Модель урока
-
-Модель урока находится в приложении `lms`.
-
-Поля урока:
-
-| Поле | Описание |
-|---|---|
-| `course` | Курс, к которому относится урок |
-| `name` | Название урока |
-| `description` | Описание урока |
-| `preview` | Превью урока |
-| `video_url` | Ссылка на видео |
-
-Связь между курсом и уроком реализована через `ForeignKey`.
-
-Один курс может содержать много уроков.
-
-## API-эндпоинты
-
-Все эндпоинты находятся по адресу:
-
-```text
-http://127.0.0.1:8000/api/
-```
-
-## Курсы
-
-CRUD для курсов реализован через `ViewSet`.
-
-### Получить список курсов
-
-```http
-GET /api/courses/
-```
-
-### Создать курс
-
-```http
-POST /api/courses/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "name": "Python-разработка",
-  "description": "Курс по основам Python"
-}
-```
-
-### Получить один курс
-
-```http
-GET /api/courses/1/
-```
-
-### Полностью обновить курс
-
-```http
-PUT /api/courses/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "name": "Python-разработка с нуля",
-  "description": "Обновлённое описание курса"
-}
-```
-
-### Частично обновить курс
-
-```http
-PATCH /api/courses/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "description": "Новое краткое описание курса"
-}
-```
-
-### Удалить курс
-
-```http
-DELETE /api/courses/1/
-```
-
-## Уроки
-
-CRUD для уроков реализован через Generic-классы.
-
-### Получить список уроков
-
-```http
-GET /api/lessons/
-```
-
-### Создать урок
-
-```http
-POST /api/lessons/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "course": 1,
-  "name": "Введение в Python",
-  "description": "Первый урок курса",
-  "video_url": "https://www.youtube.com/watch?v=example"
-}
-```
-
-### Получить один урок
-
-```http
-GET /api/lessons/1/
-```
-
-### Полностью обновить урок
-
-```http
-PUT /api/lessons/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "course": 1,
-  "name": "Основы Python",
-  "description": "Обновлённое описание урока",
-  "video_url": "https://www.youtube.com/watch?v=example"
-}
-```
-
-### Частично обновить урок
-
-```http
-PATCH /api/lessons/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "name": "Обновлённое название урока"
-}
-```
-
-### Удалить урок
-
-```http
-DELETE /api/lessons/1/
-```
-
-## Пользователи
-
-CRUD для пользователей реализован через `ViewSet`.
-
-### Получить список пользователей
-
-```http
-GET /api/users/
-```
-
-### Создать пользователя
-
-```http
-POST /api/users/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "email": "user@example.com",
-  "password": "12345",
-  "first_name": "Иван",
-  "last_name": "Иванов",
-  "phone": "+79990000000",
-  "city": "Москва"
-}
-```
-
-### Получить одного пользователя
-
-```http
-GET /api/users/1/
-```
-
-### Полностью обновить пользователя
-
-```http
-PUT /api/users/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "email": "user@example.com",
-  "first_name": "Иван",
-  "last_name": "Петров",
-  "phone": "+79991112233",
-  "city": "Санкт-Петербург"
-}
-```
-
-### Частично обновить пользователя
-
-```http
-PATCH /api/users/1/
-```
-
-Пример тела запроса:
-
-```json
-{
-  "city": "Berlin"
-}
-```
-
-### Удалить пользователя
-
-```http
-DELETE /api/users/1/
-```
-
-## Работа с изображениями
-
-Для загрузки изображений в поля `preview` и `avatar` в Postman нужно использовать формат запроса `form-data`.
-
-Пример для создания курса с изображением:
-
-| Key | Type | Value |
-|---|---|---|
-| `name` | Text | Python-разработка |
-| `description` | Text | Курс по Python |
-| `preview` | File | выбранный файл изображения |
-
-## Проверка через Postman
-
-Для проверки API можно использовать Postman.
-
-Рекомендуемый порядок проверки:
-
-1. Запустить сервер:
-
-```bash
+Для Windows PowerShell:
+
+```powershell
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.sample .env
+python manage.py migrate
 python manage.py runserver
 ```
 
-2. Создать курс:
-
-```http
-POST http://127.0.0.1:8000/api/courses/
-```
-
-3. Получить список курсов:
-
-```http
-GET http://127.0.0.1:8000/api/courses/
-```
-
-4. Создать урок, указав ID курса:
-
-```http
-POST http://127.0.0.1:8000/api/lessons/
-```
-
-5. Получить список уроков:
-
-```http
-GET http://127.0.0.1:8000/api/lessons/
-```
-
-6. Изменить курс:
-
-```http
-PATCH http://127.0.0.1:8000/api/courses/1/
-```
-
-7. Изменить урок:
-
-```http
-PATCH http://127.0.0.1:8000/api/lessons/1/
-```
-
-8. Проверить редактирование пользователя:
-
-```http
-PATCH http://127.0.0.1:8000/api/users/1/
-```
-
-## Критерии выполнения задания
-
-| Критерий | Статус |
-|---|---|
-| Проект запускается без ошибок | Выполнено |
-| DRF подключен в настройках проекта | Выполнено |
-| Пользователь наследуется от `AbstractBaseUser` | Выполнено |
-| Email используется как `USERNAME_FIELD` | Выполнено |
-| Добавлены поля пользователя из задания | Выполнено |
-| Модель курса добавлена | Выполнено |
-| Поля модели курса соответствуют заданию | Выполнено |
-| Модель урока добавлена | Выполнено |
-| Поля модели урока соответствуют заданию | Выполнено |
-| Урок связан с курсом | Выполнено |
-| CRUD для курса реализован через ViewSet | Выполнено |
-| CRUD для урока реализован через Generic-классы | Выполнено |
-| Редактирование профиля пользователя реализовано | Выполнено |
-
-## Особенности реализации
-
-На данном этапе в проекте не реализована авторизация и ограничение прав доступа к объектам.
-
-Это соответствует условию задания, так как на текущем этапе не требуется закрывать модели от редактирования даже простой авторизацией.
-
-## Возможные ошибки и решения
-
-### Ошибка при работе с изображениями
-
-Если возникает ошибка, связанная с `ImageField`, нужно убедиться, что установлен пакет `Pillow`:
+Отдельно запустите Redis, затем Celery:
 
 ```bash
-pip install pillow
+celery -A config worker -l info
+celery -A config beat -l info
 ```
 
-### Ошибка после изменения модели пользователя
-
-Если модель пользователя была изменена после создания миграций, проще всего на учебном проекте удалить базу данных `db.sqlite3`, удалить старые миграции приложений `users` и `lms`, кроме файлов `__init__.py`, затем заново выполнить:
+## Проверка перед Pull Request
 
 ```bash
-python manage.py makemigrations
-python manage.py migrate
+python manage.py check
+python manage.py test
 ```
 
-### Ошибка при создании суперпользователя
+В PR должны попасть только файлы задания, например:
 
-Проверь, что в модели пользователя указано:
-
-```python
-USERNAME_FIELD = "email"
-REQUIRED_FIELDS = []
+```text
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env.sample
+.gitignore
+README.md
+config/settings.py
+requirements.txt
 ```
 
-Также в `settings.py` должно быть:
-
-```python
-AUTH_USER_MODEL = "users.User"
-```
-
-## Автор
-
-Учебный проект для работы с Django REST Framework, кастомной моделью пользователя, курсами и уроками.
-
-Этот проект по лицензии MIT
+Не добавляйте в репозиторий `.env`, `.venv`, `db.sqlite3`, `__pycache__`, `.coverage`, `htmlcov`, `media`, `staticfiles` и служебные файлы IDE.
