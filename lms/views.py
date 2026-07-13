@@ -73,7 +73,8 @@ class CourseViewSet(viewsets.ModelViewSet):
 @extend_schema(
     tags=["lessons"],
     summary="Список уроков или создание урока",
-    description="GET возвращает список уроков с пагинацией, POST создаёт урок. В video_url разрешены только ссылки на youtube.com.",
+    description="GET возвращает список уроков с пагинацией, POST создаёт урок. "
+                "В video_url разрешены только ссылки на youtube.com.",
 )
 class LessonListCreateAPIView(generics.ListCreateAPIView):
     """Получение списка уроков и создание урока."""
@@ -161,12 +162,14 @@ class LessonRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             course.last_notification_at = now
             course.save(update_fields=["last_notification_at"])
 
+
 @extend_schema(
     tags=["subscriptions"],
     summary="Добавить или удалить подписку на курс",
     description="Если подписка текущего пользователя на course_id есть — удаляет её. Если нет — создаёт.",
     examples=[OpenApiExample("Пример запроса", value={"course_id": 1}, request_only=True)],
-    responses={200: OpenApiResponse(description="Сообщение: подписка добавлена или подписка удалена"), 400: OpenApiResponse(description="course_id не передан")},
+    responses={200: OpenApiResponse(description="Сообщение: подписка добавлена или подписка удалена"),
+               400: OpenApiResponse(description="course_id не передан")},
 )
 class CourseSubscriptionAPIView(APIView):
     """Добавление или удаление подписки текущего пользователя на курс."""

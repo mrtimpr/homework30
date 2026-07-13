@@ -3,7 +3,6 @@ from django.db import models
 from django.utils import timezone
 
 
-
 class UserManager(BaseUserManager):
     """Менеджер пользователя с авторизацией по email."""
 

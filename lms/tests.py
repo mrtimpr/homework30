@@ -62,7 +62,6 @@ class LMSAPITestCase(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertIn("is_subscribed", response.data["results"][0])
 
-
     def test_lesson_list_is_paginated(self):
         self.client.force_authenticate(user=self.user)
 
