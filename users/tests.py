@@ -134,7 +134,6 @@ class UserAndAuthEndpointTests(APITestCase):
         )
         self.assertEqual(foreign_patch_response.status_code, status.HTTP_403_FORBIDDEN)
 
-
     def test_user_can_delete_own_profile(self):
         user_to_delete = User.objects.create_user(
             email="delete-me@example.com",
@@ -179,7 +178,6 @@ class UserAndAuthEndpointTests(APITestCase):
 
         delete_response = self.client.delete(detail_url)
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
-
 
     def test_api_documentation_endpoints_available(self):
         url_names = ["schema", "swagger-ui"]

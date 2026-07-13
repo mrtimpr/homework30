@@ -39,6 +39,7 @@ class Course(models.Model):
         auto_now=True,
         verbose_name="дата обновления",
     )
+
     class Meta:
         verbose_name = "курс"
         verbose_name_plural = "курсы"
