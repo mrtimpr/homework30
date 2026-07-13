@@ -20,7 +20,8 @@ SKIPPED_PARTS = {
 
 
 def iter_python_files(root: Path) -> list[Path]:
-    """Return project Python files, excluding generated and virtual-environment directories."""
+    """Return project Python files,
+    excluding generated and virtual-environment directories."""
     return sorted(
         path
         for path in root.rglob("*.py")
