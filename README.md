@@ -1,195 +1,111 @@
 # Homework30 LMS API
 
-Django REST Framework проект для управления курсами, уроками, пользователями, подписками, Stripe-платежами и фоновой рассылкой уведомлений через Celery.
+DRF-проект с курсами, уроками, подписками, Stripe-оплатой, Celery, Redis, PostgreSQL, Gunicorn и Nginx.
 
-## Стек
+## Локальный запуск через Docker Compose
 
-- Python 3.14
-- Django / Django REST Framework
-- PostgreSQL
-- Redis
-- Celery
-- Celery Beat
-- drf-spectacular
-- Stripe API
-- Docker Compose
-
-## Быстрый запуск через Docker Compose
-
-### 1. Подготовить переменные окружения
-
-Скопируйте пример файла окружения:
+1. Скопируйте переменные окружения:
 
 ```bash
-cp .env.sample .env
+cp .env.template .env
 ```
 
-Для Windows PowerShell:
+На Windows PowerShell:
 
 ```powershell
-copy .env.sample .env
+copy .env.template .env
 ```
 
-Проверьте значения в `.env`. Для локального запуска можно оставить значения по умолчанию.
+2. Заполните `.env`: `SECRET_KEY`, `POSTGRES_PASSWORD`, `ALLOWED_HOSTS`, `EXTERNAL_URL`, Stripe/email-переменные.
 
-Обязательные переменные для Docker Compose:
-
-```env
-SECRET_KEY=django-insecure-change-this-key-for-production
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
-EXTERNAL_URL=http://localhost:8000
-
-POSTGRES_DB=homework30
-POSTGRES_USER=homework30
-POSTGRES_PASSWORD=homework30_password
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
-
-REDIS_URL=redis://redis:6379/0
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
-DEFAULT_FROM_EMAIL=noreply@example.com
-
-STRIPE_API_KEY=sk_test_change_me
-STRIPE_CURRENCY=rub
-```
-
-### 2. Запустить проект одной командой
+3. Запустите проект:
 
 ```bash
 docker compose up --build
 ```
 
-Команда поднимет все части проекта:
-
-- `web` — Django API;
-- `db` — PostgreSQL;
-- `redis` — брокер Celery;
-- `celery` — Celery worker;
-- `celery-beat` — планировщик периодических задач.
-
-Django автоматически выполнит миграции и запустится на адресе:
+4. Приложение будет доступно:
 
 ```text
-http://localhost:8000/
-```
-
-Документация API доступна по адресам:
-
-```text
-http://localhost:8000/api/schema/
-http://localhost:8000/api/docs/
-```
-
-### 3. Создать суперпользователя
-
-В отдельном терминале выполните:
-
-```bash
-docker compose exec web python manage.py createsuperuser
-```
-
-### 4. Загрузить фикстуру группы модераторов
-
-```bash
-docker compose exec web python manage.py loaddata groups.json
-```
-
-### 5. Запустить тесты
-
-```bash
-docker compose exec web python manage.py test
-```
-
-Покрытие:
-
-```bash
-docker compose exec web coverage run manage.py test
-docker compose exec web coverage report > coverage.txt
-```
-
-### 6. Остановить проект
-
-```bash
-docker compose down
-```
-
-Остановить проект и удалить volumes с данными PostgreSQL/Redis:
-
-```bash
-docker compose down -v
+http://localhost/
+http://localhost/api/docs/
+http://localhost/api/schema/
 ```
 
 ## Сервисы Docker Compose
 
-В `docker-compose.yml` описаны сервисы:
+- `nginx` — внешний HTTP-вход, порт `80`.
+- `web` — Django + Gunicorn, доступен только внутри Docker-сети через `expose: 8000`.
+- `db` — PostgreSQL, доступен только внутри Docker-сети через `expose: 5432`, данные сохраняются в volume `postgres_data`.
+- `redis` — брокер Celery, доступен только внутри Docker-сети через `expose: 6379`, данные сохраняются в volume `redis_data`.
+- `celery` — Celery worker.
+- `celery-beat` — периодические задачи Celery Beat.
 
-| Сервис | Назначение | Доступ |
-|---|---|---|
-| `web` | Django API | `ports: 8000:8000` |
-| `db` | PostgreSQL | `expose: 5432`, внешний порт не открыт |
-| `redis` | Redis | `expose: 6379`, внешний порт не открыт |
-| `celery` | Celery worker | внешний порт не нужен |
-| `celery-beat` | периодические задачи | внешний порт не нужен |
-
-Для сохранности данных используются volumes:
-
-- `postgres_data` — данные PostgreSQL;
-- `redis_data` — данные Redis;
-- `static_volume` — собранные static-файлы;
-- `media_volume` — media-файлы;
-- `celery_beat_data` — служебные файлы Celery Beat.
-
-## Локальный запуск без Docker
+## Команды проверки
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.sample .env
-python manage.py migrate
-python manage.py runserver
+docker compose exec web python manage.py check
+docker compose exec web python manage.py test
+docker compose exec web coverage run manage.py test
+docker compose exec web coverage report
 ```
 
-Для Windows PowerShell:
+## Production-сервер
 
-```powershell
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.sample .env
-python manage.py migrate
-python manage.py runserver
-```
-
-Отдельно запустите Redis, затем Celery:
+На сервере должны быть установлены:
 
 ```bash
-celery -A config worker -l info
-celery -A config beat -l info
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin git
+sudo systemctl enable --now docker
 ```
 
-## Проверка перед Pull Request
+Откройте только нужные порты:
 
 ```bash
-python manage.py check
-python manage.py test
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
 ```
 
-В PR должны попасть только файлы задания, например:
+Клонируйте репозиторий:
+
+```bash
+git clone <repo-url> homework30
+cd homework30
+cp .env.template .env
+nano .env
+docker compose up -d --build
+```
+
+## GitHub Actions Secrets
+
+В репозитории GitHub добавьте secrets:
 
 ```text
-Dockerfile
-docker-compose.yml
-.dockerignore
-.env.sample
-.gitignore
-README.md
-config/settings.py
-requirements.txt
+DOCKER_USERNAME
+DOCKER_PASSWORD
+SERVER_HOST
+SERVER_USER
+SERVER_SSH_KEY
+SERVER_PORT
+SERVER_PROJECT_DIR
 ```
 
-Не добавляйте в репозиторий `.env`, `.venv`, `db.sqlite3`, `__pycache__`, `.coverage`, `htmlcov`, `media`, `staticfiles` и служебные файлы IDE.
+`SERVER_SSH_KEY` — приватный SSH-ключ пользователя, у которого есть доступ к серверу и проекту.
+
+## CI/CD
+
+Workflow `.github/workflows/ci-cd.yml` выполняет этапы:
+
+1. Tests — установка зависимостей, проверка миграций, тесты, coverage.
+2. Lint — flake8.
+3. Build — сборка и публикация Docker-образа.
+4. Deploy — SSH-деплой на сервер после успешного build из ветки `main`.
+
+Ошибки тестов или линтера останавливают pipeline.
+
+## Pull Request
+
+PR оформляйте из ветки домашнего задания в `main`. В PR должны попасть только файлы задания. Не добавляйте в репозиторий `.env`, `.venv`, `db.sqlite3`, `__pycache__`, `htmlcov`, локальные логи и IDE-файлы.

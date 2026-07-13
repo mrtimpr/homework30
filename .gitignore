@@ -5,32 +5,8 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
-.env
-.envrc
-.venv/
-venv/
-ENV/
-env/
-.venv1/
-env.bak/
-venv.bak/
 
 # Django
 *.log
@@ -40,23 +16,26 @@ db.sqlite3-journal
 media/
 staticfiles/
 
-# Coverage / tests
+# Environments
+.env
+.env.*
+!.env.template
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+
+# Tests / coverage
 .coverage
 .coverage.*
 coverage.xml
 htmlcov/
 .pytest_cache/
-.tox/
-.nox/
-.cache/
-.hypothesis/
-
-# Type checkers / linters
 .mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-.pytype/
 .ruff_cache/
 
 # Celery / Redis
@@ -66,23 +45,6 @@ celerybeat.pid
 *.aof
 *.pid
 
-# IDE
-.idea/
-.vscode/
-*.iml
-
 # OS
 .DS_Store
 Thumbs.db
-
-# Poetry / package managers
-poetry.lock
-poetry.toml
-.pdm-python
-.pdm-build/
-.pixi/
-__pypackages__/
-
-# Docker local overrides
-compose.override.yml
-docker-compose.override.yml
